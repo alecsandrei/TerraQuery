@@ -69,7 +69,7 @@ Multi-dataset environmental analysis with six GEE datasets: Sentinel-2 NDVI, MOD
 
 ```bash
 git clone <repo-url>
-cd Earth-Engine-Bot
+cd TerraQuery
 npm run install:all
 ```
 
