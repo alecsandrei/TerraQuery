@@ -48,6 +48,16 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+// Serve frontend in production
+if (process.env.NODE_ENV === 'production') {
+  const clientDistPath = path.join(__dirname, '..', 'client-dist');
+  app.use(express.static(clientDistPath));
+
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(clientDistPath, 'index.html'));
+  });
+}
+
 // Global error handlers
 process.on('uncaughtException', (err) => {
   console.error('UNCAUGHT EXCEPTION:', err);

@@ -18,8 +18,6 @@ function getVertexAI(): VertexAI {
   return vertexAIInstance;
 }
 
-const MODEL_CHAIN = ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'];
-
 export interface GenerateOptions {
   jsonMode?: boolean;
   temperature?: number;
@@ -27,36 +25,74 @@ export interface GenerateOptions {
 }
 
 /**
- * Shared Vertex AI generation with model fallback chain.
- * Falls back through gemini-2.5-pro -> 2.5-flash -> 2.0-flash on 429 errors.
+ * Model fallback chain — includes Gemma 3 on Vertex AI.
+ *
+ * Order:
+ *   1. gemma-3-27b-it (open-weight, hosted on Vertex AI via Model Garden)
+ *   2. gemini-2.5-pro (most capable)
+ *   3. gemini-2.5-flash (fast, on 429)
+ *   4. gemini-2.0-flash (fallback, on 429)
+ *
+ * Gemma 3 is free-tier on Vertex AI Model Garden and good for
+ * narrative generation, summaries, and simpler tasks.
+ * Falls back to Gemini for complex tasks or if Gemma fails.
  */
+const MODEL_CHAIN = [
+  'gemma-3-27b-it',
+  'gemini-2.5-pro',
+  'gemini-2.5-flash',
+  'gemini-2.0-flash',
+];
+
 export async function vertexGenerate(prompt: string, options: GenerateOptions = {}): Promise<string> {
   const vertexAI = getVertexAI();
   const { jsonMode = false, temperature = 0.1, generationConfig = {} } = options;
 
   for (const modelName of MODEL_CHAIN) {
     try {
+      const isGemma = modelName.startsWith('gemma');
+
       const model = vertexAI.getGenerativeModel({
         model: modelName,
         generationConfig: {
           temperature,
-          ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+          // Gemma 3 on Vertex AI doesn't support responseMimeType for JSON mode
+          ...(!isGemma && jsonMode ? { responseMimeType: 'application/json' } : {}),
           ...generationConfig
         }
       });
+
+      // For Gemma with JSON mode, append JSON instruction to the prompt
+      const finalPrompt = isGemma && jsonMode
+        ? prompt + '\n\nIMPORTANT: Return ONLY valid JSON, no markdown fencing, no extra text.'
+        : prompt;
+
       const result = await model.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+        contents: [{ role: 'user', parts: [{ text: finalPrompt }] }]
       });
-      return result.response.candidates![0].content.parts[0].text || '';
+
+      const text = result.response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (!text) {
+        console.warn(`[${modelName}] Empty response, trying next...`);
+        continue;
+      }
+
+      console.log(`[AI] ${modelName} responded (${text.length} chars)`);
+      return text;
     } catch (e: any) {
       if (e.message?.includes('429')) {
         console.warn(`[429] ${modelName} quota hit, trying next...`);
         continue;
       }
+      // If Gemma fails for any reason, fall through to Gemini
+      if (modelName.startsWith('gemma')) {
+        console.warn(`[${modelName}] Failed: ${e.message?.slice(0, 100)}, falling back to Gemini...`);
+        continue;
+      }
       throw e;
     }
   }
-  throw new Error('All Vertex AI models failed or hit quota limits.');
+  throw new Error('All models failed (Gemma 3 + Vertex AI Gemini).');
 }
 
 /**
