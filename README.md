@@ -13,7 +13,7 @@ Conversational AI assistant with direct Google Earth Engine access. Visualize ND
 Analyze land cover transitions over decades using MODIS (global, 2001-2024) and CORINE (Europe, 1990-2018) satellite datasets. Produces animated GIF time-lapses, Sankey transition diagrams, and AI-generated environmental reports.
 
 ### Urban Dynamics
-Multi-agent system for city stakeholders. Tracks green areas (NDVI trends), industrial movement (nighttime lights), and urban expansion over 1-5 years. Three AI agents work in sequence: intent parsing, Earth Engine data gathering, and narrative generation.
+Multi-agent system for city stakeholders. Tracks green areas (NDVI trends), industrial movement (nighttime lights), and urban expansion over 1-5 years. Three AI agents work in sequence: intent parsing, Earth Engine data gathering, and detailed stakeholder report generation with executive summary, key findings, analysis, implications, and recommended actions.
 
 ### Vegetation Explorer
 Multi-dataset environmental analysis with six GEE datasets: Sentinel-2 NDVI, MODIS NDVI, MODIS Land Surface Temperature, VIIRS Nighttime Lights, Dynamic World Built-up, and CHIRPS Precipitation. Sidebar-driven or natural language queries with trend charts and map overlays.
@@ -21,26 +21,36 @@ Multi-dataset environmental analysis with six GEE datasets: Sentinel-2 NDVI, MOD
 ## Architecture
 
 ```
-├── server/                    Express + TypeScript backend (port 3001)
-│   ├── index.ts               Entry point, EE init, route registration
+├── Dockerfile                 Multi-stage Docker build (Node 22)
+├── .dockerignore              Docker build exclusions
+├── package.json               Root: runs server + client via concurrently
+│
+├── server/                    Express + TypeScript backend (port 8080 in Docker)
+│   ├── index.ts               Entry point, EE init, route registration, static file serving
+│   ├── tsconfig.json          TypeScript configuration
 │   ├── routes/
-│   │   ├── landcover.ts       POST /api/landcover/chat
-│   │   ├── urban.ts           GET/POST /api/urban/*
+│   │   ├── orchestrator.ts    POST /api/ask (LLM router to all 4 modules)
 │   │   ├── analyzer.ts        POST /api/analyzer/chat, /api/analyzer/pixel
-│   │   ├── vegetation.ts      GET /api/vegetation/datasets, POST /api/vegetation/analyze
-│   │   └── orchestrator.ts    POST /api/ask (LLM router)
+│   │   ├── landcover.ts       POST /api/landcover/chat
+│   │   ├── urban.ts           GET/POST /api/urban/* (status, analyze, parse, story)
+│   │   └── vegetation.ts      GET /api/vegetation/datasets, POST /api/vegetation/analyze
 │   └── services/
+│       ├── vertexAI.ts        Gemma 3 + Gemini fallback chain (Vertex AI)
 │       ├── earthEngine.ts     Shared EE init + landcover/urban computations
-│       ├── vertexAI.ts        Vertex AI with model fallback chain
 │       ├── analyzerTools.ts   NDVI/elevation/landcover tools for Earth Analyzer
 │       ├── vegetationRegistry.ts  6 GEE dataset configs
 │       ├── vegetationAnalyze.ts   Generic GEE pipeline + GAUL geocoding
 │       ├── datasetConfig.ts   CORINE/MODIS/DynamicWorld metadata
 │       └── geocoder.ts        Shared Nominatim geocoding
 │
-├── client/                    React + Vite + Tailwind v4 frontend (port 5173)
+├── client/                    React + Vite + Tailwind v4 frontend
+│   ├── index.html             Entry HTML
+│   ├── vite.config.ts         Vite config with API proxy
+│   ├── tsconfig.json          TypeScript configuration
 │   └── src/
 │       ├── App.tsx            React Router with persistent module mounting
+│       ├── index.css          Tailwind imports + global styles
+│       ├── main.tsx           React entry point
 │       ├── components/
 │       │   ├── PlatformShell.tsx   Top nav, module tabs, EE status badge
 │       │   ├── MapBase.tsx         Shared Leaflet map component
@@ -48,18 +58,17 @@ Multi-dataset environmental analysis with six GEE datasets: Sentinel-2 NDVI, MOD
 │       ├── context/
 │       │   └── LocationContext.tsx  Shared location state across modules
 │       └── modules/
-│           ├── landing/       Command center with AI query bar + examples
-│           ├── analyzer/      Earth Analyzer (chat + interactive map)
-│           ├── landcover/     Land Cover Change (sidebar + GIF map + Sankey)
-│           ├── urban/         Urban Dynamics (3-agent workflow + chart)
+│           ├── landing/       Command center with AI query bar + example prompts
+│           ├── analyzer/      Earth Analyzer (chat + interactive map + GEE tools)
+│           ├── landcover/     Land Cover Change (sidebar + GIF map + Sankey chart)
+│           ├── urban/         Urban Dynamics (3-agent workflow + chart + report)
 │           └── vegetation/    Vegetation Explorer (sidebar + chart + map)
-│
-└── package.json               Root: runs server + client via concurrently
 ```
 
 ## Prerequisites
 
 - **Node.js** 18+ and npm
+- **Docker** (for production deployment)
 - A **Google Cloud Platform** project with:
   - Google Earth Engine API enabled
   - Vertex AI API enabled
@@ -95,10 +104,10 @@ GOOGLE_APPLICATION_CREDENTIALS_JSON={"type":"service_account","project_id":"your
 # Required: Your GCP project ID
 GCP_PROJECT_ID=your-project-id
 
-# Optional: Vertex AI region (default: europe-west4, recommended for Earth Engine)
+# Optional: Vertex AI region (default: europe-west4)
 VERTEX_REGION=europe-west4
 
-# Optional: Server port (default: 3001)
+# Optional: Server port (default: 8080 in Docker, 3001 in dev)
 PORT=3001
 ```
 
@@ -145,6 +154,17 @@ Open **http://localhost:8080** in your browser.
 
 The Docker image uses a multi-stage build: the client is compiled with Vite, the server is compiled with TypeScript, and the production image runs the compiled JavaScript with Node.js behind a non-root user.
 
+### 6. Deploy to Google Cloud Run
+
+```bash
+gcloud run deploy terraquery \
+  --source . \
+  --region europe-west4 \
+  --allow-unauthenticated \
+  --set-env-vars "GCP_PROJECT_ID=your-project-id,VERTEX_REGION=europe-west4" \
+  --set-secrets "GOOGLE_APPLICATION_CREDENTIALS_JSON=your-secret:latest"
+```
+
 ## How It Works
 
 ### Orchestrator (Command Center)
@@ -158,12 +178,21 @@ The landing page has a unified query bar. When you submit a query:
 5. Specific environmental metrics (NDVI, temperature, precipitation) route to **Vegetation Explorer**
 6. Complex queries can invoke multiple modules with a synthesized report
 
+### AI Model Fallback Chain
+
+All LLM calls use a multi-model fallback strategy on Vertex AI:
+
+1. **Gemma 3 27B** (`gemma-3-27b-it`) — open-weight model, tried first
+2. **Gemini 2.5 Pro** — most capable, used if Gemma fails
+3. **Gemini 2.5 Flash** — fast fallback on 429 quota errors
+4. **Gemini 2.0 Flash** — last resort
+
 ### Shared Infrastructure
 
 - **Single Earth Engine init** — authenticated once at server startup, shared across all modules
-- **Vertex AI with fallback chain** — gemini-2.5-pro, falls back to gemini-2.5-flash, then gemini-2.0-flash on quota errors
 - **LocationContext** — when you query a location in one module, switching tabs preserves the location
 - **Persistent modules** — switching between tabs doesn't lose your work; all modules stay mounted
+- **Error boundaries** — each module is isolated; a crash in one doesn't affect others
 
 ## API Endpoints
 
@@ -177,17 +206,18 @@ The landing page has a unified query bar. When you submit a query:
 | `/api/urban/status` | GET | Earth Engine connection status |
 | `/api/urban/analyze` | GET | Urban dynamics GEE analysis |
 | `/api/urban/parse` | POST | Parse stakeholder query |
-| `/api/urban/story` | POST | Generate narrative report |
+| `/api/urban/story` | POST | Generate detailed stakeholder report |
 | `/api/vegetation/datasets` | GET | List available GEE datasets |
 | `/api/vegetation/analyze` | POST | Run vegetation/environmental analysis |
 
 ## Tech Stack
 
 - **Frontend:** React 19, Vite, Tailwind CSS v4, React Router, Recharts, React-Leaflet, Lucide icons
-- **Backend:** Express, TypeScript, tsx
-- **AI:** Google Vertex AI (Gemini 2.5 Pro/Flash), AI SDK
+- **Backend:** Express, TypeScript
+- **AI:** Google Vertex AI (Gemma 3 27B, Gemini 2.5 Pro/Flash)
 - **Geospatial:** Google Earth Engine (MODIS, CORINE, Sentinel-2, VIIRS, Dynamic World, CHIRPS, SRTM)
 - **Maps:** Leaflet with OpenStreetMap, CARTO, and Google Satellite basemaps
+- **Deployment:** Docker, Google Cloud Run
 
 ## Authors
 
