@@ -166,7 +166,7 @@ The landing page has a unified query bar. When you submit a query:
 
 ## Authors
 
-- Senyang Li (sneyang.li@utwente.nl)
+- Senyang Li (senyang.li@utwente.nl)
 - Tong Jiang (tong.jiang@utwente.nl)
 - Rosa Aguilar (r.aguilar@utwente.nl)
 - Alex-Andrei Cuvuliuc (alex-andrei.cuvuliuc@utwente.nl)
