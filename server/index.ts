@@ -20,7 +20,7 @@ dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
 
 // Write the JSON string to a file so Google Cloud SDKs can use it
 if (process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON && !process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-  const tmpKeyPath = path.join(__dirname, 'temp-sa-key.json');
+  const tmpKeyPath = '/tmp/temp-sa-key.json';
   fs.writeFileSync(tmpKeyPath, process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON);
   process.env.GOOGLE_APPLICATION_CREDENTIALS = tmpKeyPath;
 }
