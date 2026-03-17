@@ -200,9 +200,9 @@ export default function LandingPage() {
             <div className="flex flex-wrap gap-2">
               {[
                 { label: 'Amazon deforestation timelapse', q: 'Show me deforestation in the Amazon rainforest' },
-                { label: 'Borneo palm oil expansion', q: 'Show land cover transitions in Borneo over 20 years' },
-                { label: 'Dubai from desert to city', q: 'Analyze land cover change in Dubai' },
-                { label: 'European farmland shift', q: 'Analyze land cover change in the Netherlands' },
+                { label: 'Dutch farmland shift', q: 'Analyze land cover change in the Netherlands' },
+                { label: 'Barcelona urban sprawl', q: 'Analyze land cover change in Barcelona' },
+                { label: 'Paris urban expansion', q: 'Analyze land cover change in Paris over 20 years' },
               ].map(ex => (
                 <button key={ex.label} onClick={() => submitQuery(ex.q)}
                   className="px-3 py-1.5 text-[13px] rounded-lg border border-sky-500/20 text-slate-400 hover:border-sky-400/50 hover:text-sky-300 hover:bg-sky-500/5 transition-all">

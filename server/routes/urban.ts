@@ -63,14 +63,45 @@ router.post('/story', async (req: Request, res: Response) => {
 
   try {
     const result = await vertexGenerate(
-      `You are an expert urban planner and data storyteller.
-Write a compelling, professional narrative (2-3 paragraphs) for city stakeholders explaining the changes in ${city} over the last ${timeframeYears} years regarding ${metric.replace('_', ' ')}.
-The data analysis from Google Earth Engine shows a ${trend} trend.
-Data summary: ${dataSummary}
-1. Clearly state the findings.
-2. Provide plausible, real-world urban dynamics explanations for WHY this ${trend} trend might be happening.
-3. Suggest a brief recommendation or implication for the stakeholders.
-Keep the tone objective, insightful, and accessible to non-technical policymakers.`
+      `You are a senior urban planner and data storyteller writing a detailed stakeholder report for city policymakers.
+
+**City:** ${city}
+**Metric:** ${metric.replace('_', ' ')}
+**Timeframe:** Last ${timeframeYears} years
+**Observed Trend:** ${trend}
+**Data Summary:** ${dataSummary}
+
+Write a comprehensive, well-structured stakeholder report using the following format in Markdown:
+
+### Executive Summary
+A concise 2-3 sentence overview of the key finding and its significance for ${city}.
+
+### Key Findings
+- Present 3-4 bullet points with specific data-driven observations
+- Reference the actual numbers and trend direction
+- Compare values between the start and end of the analysis period
+
+### Analysis & Context
+Explain in 2-3 paragraphs:
+- What is driving this ${trend} trend? Consider climate factors, urban development policies, population growth, economic shifts, infrastructure projects, or seasonal patterns.
+- How does this compare to global or regional benchmarks?
+- Are there any notable inflection points or anomalies in the data?
+
+### Implications for Stakeholders
+- What does this mean for residents, businesses, and city services?
+- What are the environmental or economic consequences if the trend continues?
+
+### Recommended Actions
+Provide 3-5 specific, actionable bullet points that policymakers should consider, such as:
+- Policy changes
+- Infrastructure investments
+- Monitoring programs
+- Community engagement initiatives
+
+### Data Sources
+Briefly note that data was sourced from Google Earth Engine satellite observations (MODIS NDVI / VIIRS Nighttime Lights).
+
+Use a professional but accessible tone. Avoid overly technical jargon. Use bold text for emphasis on critical numbers and findings.`
     );
     res.json({ story: result });
   } catch (error: any) {
